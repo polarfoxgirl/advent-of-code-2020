@@ -1,4 +1,4 @@
-{:ok, input} = File.read("test_input_2")
+{:ok, input} = File.read("input")
 
 defmodule ShuttleSearch do
   def calc_next_timestamp(bid, timestamp) do
@@ -16,21 +16,22 @@ defmodule ShuttleSearch do
   #
   # b*p + (o + o1) = b1*k1
   # p = (b1*k1 + o + o1) / b
-  def check_recursively(period, iter_bus_offset, other_bus_offsets) do
-    {bid, offset} = iter_bus_offset
-    t = period * bid - offset
+  def check_recursively(t, period, curr_bus, bus_tail) do
+    {bid, offset} = curr_bus
 
-    if Enum.all?(other_bus_offsets, fn {b, o} -> rem(t + o, b) == 0 end) do
-      t
+    if rem(t + offset, bid) == 0 do
+      if Enum.empty?(bus_tail) do
+        t
+      else
+        [next_bus | new_tail] = bus_tail
+        new_period = period * bid
+        check_recursively(t + new_period, new_period, next_bus, new_tail)
+      end
     else
-      check_recursively(period + 1, iter_bus_offset, other_bus_offsets)
+      check_recursively(t + period, period, curr_bus, bus_tail)
     end
   end
 
-  # 17, x, 13, 19
-  # {17, 0}, {13, 2}, {19, 3}
-  # 0*M0-1 + 646*M1-1 + 663*M2-1 = 3417
-  #
   def solve(input) do
     [first_line, second_line] = String.split(input)
     timestamp = String.to_integer(first_line)
@@ -48,20 +49,13 @@ defmodule ShuttleSearch do
     IO.puts("Result: #{bid*wait_time}")
 
     # Part 2
-    [iter_bus_offset | other_bus_offsets] = buses
+    [init_bus | other_buses] = buses
       |> Enum.with_index()
       |> Enum.reject(fn {x, _} -> x == "x" end)
       |> Enum.map(fn {x, y} -> {String.to_integer(x), y} end)
       |> Enum.sort_by(fn {b, _o} -> b end, &>=/2)
 
-    other_bus_offsets = Enum.reverse(other_bus_offsets)
-    other_bus_ids = Enum.map(other_bus_offsets, fn {x, _} -> x end)
-    # others_gcd = Enum.reduce(other_bus_ids, &Integer.gcd/2)
-    # others_lcm = div(Enum.reduce(other_bus_ids, &*/2), others_gcd)
-    # IO.puts("Got GCD #{others_gcd} and LCM #{others_lcm}")
-
-    # cheat_init_period = div(100000000000000, elem(iter_bus_offset, 0))
-    result = check_recursively(0, iter_bus_offset, other_bus_offsets)
+    result = check_recursively(0, 1, init_bus, other_buses)
 
     IO.puts("Result 2: #{result}")
   end
