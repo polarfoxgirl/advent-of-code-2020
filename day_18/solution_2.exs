@@ -29,77 +29,40 @@ defmodule OperationOrder do
     end
   end
 
-  def build_ast(lex, stack) do
-    {current, new_stack} = List.pop_at(stack, -1)
-    cond do
-      # Case 1: Left hand side
-      not Map.has_key?(current, :left) ->
-        case lex do
-          "(" -> stack ++ [%{}]
-          n when is_integer(n) -> new_stack ++ [%{left: n}]
-          _ ->
-            IO.puts("Got unexpected '#{lex}' on the left side")
-            :error
-        end
-      # Case 2: Operation or leaf node
-      not Map.has_key?(current, :op) ->
-        case lex do
-          ")" ->
-            {prev, new_new_stack} = List.pop_at(new_stack, -1)
-            cond do
-              # Braces were on right hand side
-              Map.has_key?(prev, :op) ->
-                # IO.puts("Poped a frame and calc #{prev.left} with #{current.left}")
-                res = Map.put(prev, right: current.left)
-                new_new_stack ++ [%{left: res}]
-              # Braces were on left hand side
-              Enum.empty?(prev) ->
-                # IO.puts("Poped a frame and put left as #{current.left}")
-                new_new_stack ++ [%{left: current.left}]
-              true ->
-                # IO.puts("Got a frame with just left after popping")
-                :error
-            end
-          "+" -> new_stack ++ [%{left: current.left, op: "+"}]
-          "*" -> new_stack ++ [%{left: current.left, op: "*"}]
-          _ ->
-            IO.puts("Got unexpected '#{lex}' on the operator position")
-            :error
-        end
-      # Case 3: Right hand side
-      true ->
-        case lex do
-          "(" -> stack ++ [%{}]
-          n when is_integer(n) ->
-            # IO.puts("Reduced current frame with  #{current.left} and #{n}")
-            res = Map.put(current, right: n)
-            new_stack ++ [%{left: res}]
-          true ->
-            IO.puts("Got unexpected '#{lex}' on the right side")
-            :error
-        end
-    end
-  end
+  def eval_expression(lexemes, pos, acc) do
+    {add_acc, mult_list} = acc
 
-  def reduce_tree(node, op, op_fun) do
-    left = reduce_tree(node.left, op, op_fun)
-    unless Map.has_key?(:op) do
-      left
+    if pos == tuple_size(lexemes) do
+      result = Enum.reduce([add_acc | mult_list], &*/2)
+      {result, pos}
     else
-      right = reduce_tree(node.right, op, op_fun)
-      if node.op = op do
-        op_fun(
+      case elem(lexemes, pos) do
+        "+" -> eval_expression(lexemes, pos + 1, acc)
+        "*" ->
+          new_acc = {0, [add_acc | mult_list]}
+          eval_expression(lexemes, pos + 1, new_acc)
+        n when is_integer(n) ->
+          new_acc = {add_acc + n, mult_list}
+          eval_expression(lexemes, pos + 1, new_acc)
+        "(" ->
+          {sub_res, new_pos} = eval_expression(lexemes, pos + 1, {0, []})
+          new_acc = {add_acc + sub_res, mult_list}
+          eval_expression(lexemes, new_pos, new_acc)
+        ")" ->
+          result = Enum.reduce([add_acc | mult_list], &*/2)
+          {result, pos + 1}
       end
     end
   end
 
   def eval_line(line) do
-    final_stack = line
+    {result, _} = line
       |> lex_line()
-      |> Enum.reduce([%{}], &eval_expr/2)
-    [root_node] = final_stack
+      |> List.to_tuple()
+      |> eval_expression(0, {0, []})
     result
   end
+
 
   def solve(input) do
     lines = String.split(input, "\n")
